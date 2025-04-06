@@ -1,0 +1,21 @@
+{
+  "name": "midi-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for MIDI composition",
+  "main": "build/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc && chmod +x build/index.js",
+    "start": "node build/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.8.0",
+    "midi-writer-js": "^3.1.1",
+    "tonal": "^4.14.1"
+  },
+  "devDependencies": {
+    "@types/jsmidgen": "^0.1.3",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
