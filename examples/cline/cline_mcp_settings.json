@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "musicComposer": {
+      "command": "node",
+      "args": ["/path/to/midi-mcp-server/build/index.js"]
+    }
+  }
+}

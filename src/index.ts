@@ -88,18 +88,18 @@ class MidiMcpServer {
               composition: {
                 type: "string",
                 description: "音楽データのオブジェクト。以下の形式に従ってください：\n" +
-                    "{" +
-                    "  bpm: number," +
-                    "  timeSignature: { numerator: number, denominator: number }," +
-                    "  tracks: [" +
-                    "    {" +
-                    "      name: string," +
-                    "      instrument: number," +
-                    "      notes: [" +
-                    "        { pitch: number, start: number, duration: number, velocity: number }" +
-                    "      ]" +
-                    "    }" +
-                    "  ]," +
+                    "{\n" +
+                    "  bpm: number,\n" +
+                    "  timeSignature: { numerator: number, denominator: number },\n" +
+                    "  tracks: [\n" +
+                    "    {\n" +
+                    "      name: string,\n" +
+                    "      instrument: number,\n" +
+                    "      notes: [\n" +
+                    "        { pitch: number, start: number, duration: number, velocity: number }\n" +
+                    "      ]\n" +
+                    "    }\n" +
+                    "  ],\n" +
                     "}\n" +
                     "各プロパティの説明：\n" +
                     "- bpm: テンポ（1分間の拍数）\n" +
