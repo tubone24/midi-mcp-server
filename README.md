@@ -101,7 +101,17 @@ const composition = {
 
 - @modelcontextprotocol/sdk: MCP server implementation
 - midi-writer-js: Library for creating MIDI files
-- tonal: Music theory library
+
+## Demo
+
+For example, the prompt below, which is a request to create a minor scale 8-bar choral piece, can be processed by the server:
+
+```text
+8小節の合唱曲を作って。
+若干マイナー調で、メロディックな音階を作ってほしい
+```
+
+[melodic_minor_chorus.mid](docs/melodic_minor_chorus.mid)
 
 ## Note on Local Execution
 
