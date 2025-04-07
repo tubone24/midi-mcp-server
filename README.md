@@ -111,6 +111,12 @@ For example, the prompt below, which is a request to create a minor scale 8-bar 
 若干マイナー調で、メロディックな音階を作ってほしい
 ```
 
+
+
+https://github.com/user-attachments/assets/1dd12911-61fb-427b-8486-ff66adc74d86
+
+
+
 [melodic_minor_chorus.mid](docs/melodic_minor_chorus.mid)
 
 ## Note on Local Execution
