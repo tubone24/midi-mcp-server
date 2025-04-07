@@ -113,7 +113,9 @@ For example, the prompt below, which is a request to create a minor scale 8-bar 
 
 
 
-https://github.com/user-attachments/assets/1dd12911-61fb-427b-8486-ff66adc74d86
+https://github.com/user-attachments/assets/e20ebef0-fdbf-4e72-910d-41b94183f9d9
+
+
 
 
 
