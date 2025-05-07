@@ -1,5 +1,8 @@
 [![MseeP.ai Security Assessment Badge](https://mseep.net/pr/tubone24-midi-mcp-server-badge.png)](https://mseep.ai/app/tubone24-midi-mcp-server)
 
+[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/74175d16-e83a-4509-b7ab-31ff1c59cef8)
+
+
 # MIDI MCP Server
 
 ## Overview
