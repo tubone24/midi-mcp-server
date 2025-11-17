@@ -2,8 +2,7 @@
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
     "ecmaVersion": 2022,
-    "sourceType": "module",
-    "project": "./tsconfig.json"
+    "sourceType": "module"
   },
   "plugins": ["@typescript-eslint", "prettier"],
   "extends": [
@@ -25,5 +24,5 @@
     "@typescript-eslint/ban-ts-comment": "warn",
     "no-console": ["warn", { "allow": ["error", "warn"] }]
   },
-  "ignorePatterns": ["build/", "node_modules/", "*.js"]
+  "ignorePatterns": ["build/", "node_modules/", "*.js", "**/*.test.ts", "**/__tests__/**"]
 }

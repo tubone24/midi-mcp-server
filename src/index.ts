@@ -368,7 +368,7 @@ class MidiMcpServer {
       // 各トラックを処理
       composition.tracks.forEach((trackData, trackIndex) => {
         // midi-writer-jsの型ファイルがおかしいっぽい。
-        // @ts-ignore
+        // @ts-expect-error - Track is not properly exported in type definitions
         const track = new MidiWriter.Track();
 
         // トラック名を設定
@@ -387,8 +387,8 @@ class MidiMcpServer {
         // 楽器を設定
         if (trackData.instrument !== undefined) {
           // midi-writer-jsの型ファイルがおかしいっぽい。
-          // @ts-ignore
           track.addEvent(
+            // @ts-expect-error - ProgramChangeEvent is not properly exported in type definitions
             new MidiWriter.ProgramChangeEvent({
               instrument: trackData.instrument,
               channel: trackIndex % 16,
@@ -412,8 +412,8 @@ class MidiMcpServer {
           }
 
           // midi-writer-jsの型ファイルがおかしいっぽい。
-          // @ts-ignore
           track.addEvent(
+            // @ts-expect-error - NoteEvent is not properly exported in type definitions
             new MidiWriter.NoteEvent({
               pitch: [pitch],
               duration: note.duration,
@@ -428,7 +428,7 @@ class MidiMcpServer {
       });
 
       // midi-writer-jsの型ファイルがおかしいっぽい。
-      // @ts-ignore
+      // @ts-expect-error - Writer is not properly exported in type definitions
       const writer = new MidiWriter.Writer(tracks);
 
       // 出力パスの処理
