@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ErrorCode,
   ListToolsRequestSchema,
   McpError,
-} from "@modelcontextprotocol/sdk/types.js";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
+} from '@modelcontextprotocol/sdk/types.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import MidiWriter from 'midi-writer-js';
 
 interface MidiNote {
@@ -45,25 +45,25 @@ class MidiMcpServer {
 
   constructor() {
     this.server = new Server(
-        {
-          name: "midi-mcp-server",
-          version: "0.1.0",
-        },
-        {
-          capabilities: {
-            tools: {},
-            // バッチ処理をサポートすることを明示
-            batching: {
-              supported: true
-            }
+      {
+        name: 'midi-mcp-server',
+        version: '0.1.0',
+      },
+      {
+        capabilities: {
+          tools: {},
+          // バッチ処理をサポートすることを明示
+          batching: {
+            supported: true,
           },
-        }
+        },
+      }
     );
 
     this.setupToolHandlers();
 
-    this.server.onerror = (error) => console.error("[MCP Error]", error);
-    process.on("SIGINT", async () => {
+    this.server.onerror = (error) => console.error('[MCP Error]', error);
+    process.on('SIGINT', async () => {
       await this.server.close();
       process.exit(0);
     });
@@ -73,210 +73,211 @@ class MidiMcpServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
-          name: "create_midi",
-          description: "テキスト形式の音楽データからMIDIファイルを生成します。compositionが長くなる場合はinputSchemaを一度JSONファイルに書き出して読み込んで渡すようにすると安定します。",
+          name: 'create_midi',
+          description:
+            'テキスト形式の音楽データからMIDIファイルを生成します。compositionが長くなる場合はinputSchemaを一度JSONファイルに書き出して読み込んで渡すようにすると安定します。',
           inputSchema: {
-            type: "object",
+            type: 'object',
             properties: {
               title: {
-                type: "string",
-                description: "曲のタイトル",
+                type: 'string',
+                description: '曲のタイトル',
               },
               composition: {
-                type: "object",
-                description: "音楽データのオブジェクト",
+                type: 'object',
+                description: '音楽データのオブジェクト',
                 properties: {
-                  bpm: { type: "number" },
+                  bpm: { type: 'number' },
                   timeSignature: {
-                    type: "object",
+                    type: 'object',
                     properties: {
-                      numerator: { type: "number" },
-                      denominator: { type: "number" }
-                    }
+                      numerator: { type: 'number' },
+                      denominator: { type: 'number' },
+                    },
                   },
                   tracks: {
-                    type: "array",
+                    type: 'array',
                     items: {
-                      type: "object",
+                      type: 'object',
                       properties: {
-                        name: { type: "string" },
-                        instrument: { type: "number" },
+                        name: { type: 'string' },
+                        instrument: { type: 'number' },
                         notes: {
-                          type: "array",
+                          type: 'array',
                           items: {
-                            type: "object",
+                            type: 'object',
                             properties: {
-                              pitch: { type: "number" },
+                              pitch: { type: 'number' },
                               beat: {
-                                type: "number",
-                                description: "拍単位での位置（1.0 = 1拍目、1.5 = 1拍目と2拍目の間）"
+                                type: 'number',
+                                description:
+                                  '拍単位での位置（1.0 = 1拍目、1.5 = 1拍目と2拍目の間）',
                               },
-                              startTime: { type: "number" },
+                              startTime: { type: 'number' },
                               duration: {
-                                type: "string",
-                                enum: ["1", "2", "4", "8", "16", "32", "64"],
-                                description: "音符の長さ（'1'=全音符, '2'=2分音符, '4'=4分音符, '8'=8分音符, '16'=16分音符, '32'=32分音符, '64'=64分音符）"
+                                type: 'string',
+                                enum: ['1', '2', '4', '8', '16', '32', '64'],
+                                description:
+                                  "音符の長さ（'1'=全音符, '2'=2分音符, '4'=4分音符, '8'=8分音符, '16'=16分音符, '32'=32分音符, '64'=64分音符）",
                               },
-                              velocity: { type: "number" }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
+                              velocity: { type: 'number' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
                 },
-                required: ["bpm", "tracks"]
+                required: ['bpm', 'tracks'],
               },
               composition_file: {
-                type: "string",
-                description: "音楽データが含まれるJSONファイルの絶対パス。compositionが大きい場合はこちらを使用してください。"
+                type: 'string',
+                description:
+                  '音楽データが含まれるJSONファイルの絶対パス。compositionが大きい場合はこちらを使用してください。',
               },
               output_path: {
-                type: "string",
-                description: "出力ファイル絶対パス",
+                type: 'string',
+                description: '出力ファイル絶対パス',
               },
             },
-            required: ["title", "output_path"],
-            oneOf: [
-              { required: ["composition"] },
-              { required: ["composition_file"] }
-            ]
+            required: ['title', 'output_path'],
+            oneOf: [{ required: ['composition'] }, { required: ['composition_file'] }],
           },
         },
       ],
     }));
 
-    this.server.setRequestHandler(
-        CallToolRequestSchema,
-        async (request) => {
-          const toolName = request.params.name;
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const toolName = request.params.name;
 
-          try {
-            if (toolName !== "create_midi") {
-              throw new McpError(
-                  ErrorCode.MethodNotFound,
-                  `Unknown tool: ${toolName}`
-              );
-            }
+      try {
+        if (toolName !== 'create_midi') {
+          throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
+        }
 
-            const args = request.params.arguments as {
-              title: string;
-              composition?: MidiComposition | string;
-              composition_file?: string;
-              output_path: string;
-            };
+        const args = request.params.arguments as {
+          title: string;
+          composition?: MidiComposition | string;
+          composition_file?: string;
+          output_path: string;
+        };
 
-            // 進捗通知を送信
-            this.server.notification({
-              method: "notifications/progress",
-              params: {
-                progress: 0,
-                message: "MIDI生成を開始しました"
-              }
-            });
+        // 進捗通知を送信
+        this.server.notification({
+          method: 'notifications/progress',
+          params: {
+            progress: 0,
+            message: 'MIDI生成を開始しました',
+          },
+        });
 
-            let composition: MidiComposition;
+        let composition: MidiComposition;
 
-            // compositionとcomposition_fileの両方が指定されていない場合はエラー
-            if (!args.composition && !args.composition_file) {
-              throw new McpError(
-                  ErrorCode.InvalidParams,
-                  "composition または composition_file のいずれかを指定する必要があります"
-              );
-            }
+        // compositionとcomposition_fileの両方が指定されていない場合はエラー
+        if (!args.composition && !args.composition_file) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'composition または composition_file のいずれかを指定する必要があります'
+          );
+        }
 
+        try {
+          // composition_fileが指定されている場合はファイルから読み込む
+          if (args.composition_file) {
             try {
-              // composition_fileが指定されている場合はファイルから読み込む
-              if (args.composition_file) {
-                try {
-                  const fileContent = fs.readFileSync(args.composition_file, 'utf8');
-                  composition = JSON.parse(fileContent);
-                } catch (e) {
-                  throw new McpError(
-                      ErrorCode.InvalidParams,
-                      `JSONファイルの読み込みに失敗しました: ${(e as Error).message}`
-                  );
-                }
-              } else if (typeof args.composition === "string") {
-                composition = JSON.parse(args.composition);
-              } else {
-                composition = args.composition as MidiComposition;
-              }
-
-              // 数値のdurationを文字列に変換
-              composition.tracks.forEach(track => {
-                track.notes.forEach(note => {
-                  if (typeof note.duration === 'number') {
-                    // 数値のdurationを適切な文字列に変換
-                    switch (note.duration) {
-                      case 0.125: note.duration = '32'; break;
-                      case 0.25: note.duration = '16'; break;
-                      case 0.5: note.duration = '8'; break;
-                      case 1: note.duration = '4'; break;
-                      case 2: note.duration = '2'; break;
-                      default: note.duration = '4'; // デフォルト値
-                    }
-                  }
-                });
-              });
-
-              // time属性をstartTimeに変換
-              composition.tracks.forEach(track => {
-                track.notes.forEach(note => {
-                  if ('time' in note && note.startTime === undefined) {
-                    note.startTime = note.time;
-                    delete note.time;
-                  }
-                });
-              });
-
+              const fileContent = fs.readFileSync(args.composition_file, 'utf8');
+              composition = JSON.parse(fileContent);
             } catch (e) {
               throw new McpError(
-                  ErrorCode.InvalidParams,
-                  `Invalid composition format: ${(e as Error).message}`
+                ErrorCode.InvalidParams,
+                `JSONファイルの読み込みに失敗しました: ${(e as Error).message}`
               );
             }
+          } else if (typeof args.composition === 'string') {
+            composition = JSON.parse(args.composition);
+          } else {
+            composition = args.composition as MidiComposition;
+          }
 
-            const midiFilePath = await this.createMidiFile(
-                args.title,
-                composition,
-                args.output_path
-            );
-
-            // 完了通知
-            this.server.notification({
-              method: "notifications/progress",
-              params: {
-                progress: 100,
-                message: "MIDI生成が完了しました"
+          // 数値のdurationを文字列に変換
+          composition.tracks.forEach((track) => {
+            track.notes.forEach((note) => {
+              if (typeof note.duration === 'number') {
+                // 数値のdurationを適切な文字列に変換
+                switch (note.duration) {
+                  case 0.125:
+                    note.duration = '32';
+                    break;
+                  case 0.25:
+                    note.duration = '16';
+                    break;
+                  case 0.5:
+                    note.duration = '8';
+                    break;
+                  case 1:
+                    note.duration = '4';
+                    break;
+                  case 2:
+                    note.duration = '2';
+                    break;
+                  default:
+                    note.duration = '4'; // デフォルト値
+                }
               }
             });
+          });
 
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `「${args.title}」のMIDIファイルを生成しました。ファイルは ${midiFilePath} に保存されました。`,
-                },
-              ],
-            };
-          } catch (error) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `エラーが発生しました: ${(error as Error).message}`,
-                },
-              ],
-              isError: true,
-            };
-          }
+          // time属性をstartTimeに変換
+          composition.tracks.forEach((track) => {
+            track.notes.forEach((note) => {
+              if ('time' in note && note.startTime === undefined) {
+                note.startTime = note.time;
+                delete note.time;
+              }
+            });
+          });
+        } catch (e) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Invalid composition format: ${(e as Error).message}`
+          );
         }
-    );
+
+        const midiFilePath = await this.createMidiFile(args.title, composition, args.output_path);
+
+        // 完了通知
+        this.server.notification({
+          method: 'notifications/progress',
+          params: {
+            progress: 100,
+            message: 'MIDI生成が完了しました',
+          },
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `「${args.title}」のMIDIファイルを生成しました。ファイルは ${midiFilePath} に保存されました。`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `エラーが発生しました: ${(error as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    });
   }
 
   private noteToMidiNumber(note: string | number): string | number {
-    if (typeof note === "number") {
+    if (typeof note === 'number') {
       return note;
     }
     return note;
@@ -309,7 +310,7 @@ class MidiMcpServer {
       // トラックのノートを適切なサイズに分割
       if (track.notes.length > batchSize) {
         const chunks = this.chunkArray(track.notes, batchSize);
-        const chunkPromises = chunks.map(chunk => this.processNoteChunk(chunk));
+        const chunkPromises = chunks.map((chunk) => this.processNoteChunk(chunk));
         await Promise.all(chunkPromises);
       } else {
         await this.processTrack(track);
@@ -319,11 +320,11 @@ class MidiMcpServer {
       // 進捗を更新
       const progress = Math.floor((processedTracks / totalTracks) * 100);
       this.server.notification({
-        method: "notifications/progress",
+        method: 'notifications/progress',
         params: {
           progress: progress,
-          message: `トラック ${processedTracks}/${totalTracks} を処理中...`
-        }
+          message: `トラック ${processedTracks}/${totalTracks} を処理中...`,
+        },
       });
     }
   }
@@ -353,9 +354,9 @@ class MidiMcpServer {
   }
 
   private async createMidiFile(
-      title: string,
-      composition: MidiComposition,
-      outputPath: string
+    title: string,
+    composition: MidiComposition,
+    outputPath: string
   ): Promise<string> {
     try {
       // 大きなcompositionを前処理
@@ -367,7 +368,7 @@ class MidiMcpServer {
       // 各トラックを処理
       composition.tracks.forEach((trackData, trackIndex) => {
         // midi-writer-jsの型ファイルがおかしいっぽい。
-        // @ts-ignore
+        // @ts-expect-error - Track is not properly exported in type definitions
         const track = new MidiWriter.Track();
 
         // トラック名を設定
@@ -386,15 +387,17 @@ class MidiMcpServer {
         // 楽器を設定
         if (trackData.instrument !== undefined) {
           // midi-writer-jsの型ファイルがおかしいっぽい。
-          // @ts-ignore
-          track.addEvent(new MidiWriter.ProgramChangeEvent({
-            instrument: trackData.instrument,
-            channel: trackIndex % 16
-          }));
+          track.addEvent(
+            // @ts-expect-error - ProgramChangeEvent is not properly exported in type definitions
+            new MidiWriter.ProgramChangeEvent({
+              instrument: trackData.instrument,
+              channel: trackIndex % 16,
+            })
+          );
         }
 
         // ノートを追加
-        trackData.notes.forEach(note => {
+        trackData.notes.forEach((note) => {
           const pitch = this.noteToMidiNumber(note.pitch);
           const velocity = note.velocity !== undefined ? note.velocity : 100;
           const channel = note.channel !== undefined ? note.channel % 16 : trackIndex % 16;
@@ -409,21 +412,23 @@ class MidiMcpServer {
           }
 
           // midi-writer-jsの型ファイルがおかしいっぽい。
-          // @ts-ignore
-          track.addEvent(new MidiWriter.NoteEvent({
-            pitch: [pitch],
-            duration: note.duration,
-            velocity: velocity,
-            channel: channel,
-            wait: wait
-          }));
+          track.addEvent(
+            // @ts-expect-error - NoteEvent is not properly exported in type definitions
+            new MidiWriter.NoteEvent({
+              pitch: [pitch],
+              duration: note.duration,
+              velocity: velocity,
+              channel: channel,
+              wait: wait,
+            })
+          );
         });
 
         tracks.push(track);
       });
 
       // midi-writer-jsの型ファイルがおかしいっぽい。
-      // @ts-ignore
+      // @ts-expect-error - Writer is not properly exported in type definitions
       const writer = new MidiWriter.Writer(tracks);
 
       // 出力パスの処理
@@ -444,10 +449,10 @@ class MidiMcpServer {
 
       return outputFilePath;
     } catch (error) {
-      console.error("MIDI生成中にエラーが発生しました:", error);
+      console.error('MIDI生成中にエラーが発生しました:', error);
       throw new McpError(
-          ErrorCode.InternalError,
-          `MIDI生成中にエラーが発生しました: ${(error as Error).message}`
+        ErrorCode.InternalError,
+        `MIDI生成中にエラーが発生しました: ${(error as Error).message}`
       );
     }
   }
@@ -455,7 +460,7 @@ class MidiMcpServer {
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("MIDI MCP server running on stdio");
+    console.error('MIDI MCP server running on stdio');
   }
 }
 
@@ -466,6 +471,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("Fatal error in main():", error);
+  console.error('Fatal error in main():', error);
   process.exit(1);
 });
