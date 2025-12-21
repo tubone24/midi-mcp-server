@@ -5,6 +5,10 @@
 
 # MIDI MCP Server
 
+**Another implementation method uses Agent Skills. This approach can compose better songs with less context.**
+
+https://github.com/tubone24/midi-agent-skill
+
 ## Overview
 MIDI MCP Server is a Model Context Protocol (MCP) server that enables AI models to generate MIDI files from text-based music data. This tool allows for programmatic creation of musical compositions through a standardized interface.
 
