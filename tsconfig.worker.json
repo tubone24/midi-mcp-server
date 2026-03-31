@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["@cloudflare/workers-types"],
+    "lib": ["ES2020"]
+  },
+  "include": ["src/worker.ts", "src/chord-utils.ts", "src/ui-html.ts", "src/server.ts"]
+}
