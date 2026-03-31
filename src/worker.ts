@@ -7,9 +7,16 @@
  * suitable for use as a remote MCP server from Claude Desktop,
  * Claude.ai, or any MCP-compatible client.
  */
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { z } from 'zod';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import {
+  CallToolRequestSchema,
+  ErrorCode,
+  ListResourcesRequestSchema,
+  ListToolsRequestSchema,
+  McpError,
+  ReadResourceRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import MidiWriter from 'midi-writer-js';
 import {
   resolvePitches,
@@ -145,77 +152,132 @@ function preprocessComposition(raw: MidiComposition): MidiComposition {
 
 // ---------- Server Factory ----------
 
-function createWorkerServer(): McpServer {
-  const server = new McpServer(
+const RESOURCE_URI = 'ui://midi-preview/app';
+
+function createWorkerServer(): Server {
+  const chordQualities = getSupportedChordQualities();
+  const htmlContent = getMcpAppHtml();
+
+  const server = new Server(
     { name: 'midi-mcp-server', version: '0.2.0' },
     { capabilities: { tools: {}, resources: {} } }
   );
 
-  const chordQualities = getSupportedChordQualities();
-  const resourceUri = 'ui://midi-preview/app';
-  const htmlContent = getMcpAppHtml();
-
-  server.resource('midi-preview-app', resourceUri, async () => ({
-    contents: [
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: [
       {
-        uri: resourceUri,
+        uri: RESOURCE_URI,
+        name: 'MIDI Preview App',
+        description: 'Interactive MIDI preview with piano-roll notation and audio playback',
         mimeType: 'text/html',
-        text: htmlContent,
       },
     ],
   }));
 
-  server.tool(
-    'create_midi',
-    `Generate a MIDI file from structured composition data with chord support.
-Supports single notes, note arrays (chords), and chord names (${chordQualities.slice(0, 10).join(', ')}, etc.).
-Returns base64-encoded MIDI data and triggers a preview UI for playback and notation display.`,
-    {
-      title: z.string().describe('Title of the composition'),
-      composition: z
-        .object({
-          bpm: z.number().min(20).max(300),
-          tempo: z.number().optional(),
-          timeSignature: z
-            .object({
-              numerator: z.number().min(1).max(16),
-              denominator: z.number().min(1).max(16),
-            })
-            .optional(),
-          tracks: z.array(
-            z.object({
-              name: z.string().optional(),
-              instrument: z.number().min(0).max(127).optional(),
-              notes: z.array(
-                z.object({
-                  pitch: z.union([
-                    z.number().min(0).max(127),
-                    z.string(),
-                    z.array(z.union([z.number(), z.string()])),
-                  ]),
-                  chord: z.string().optional(),
-                  beat: z.number().optional(),
-                  startTime: z.number().optional(),
-                  duration: z.union([z.string(), z.number()]),
-                  velocity: z.number().min(0).max(127).optional(),
-                  channel: z.number().min(0).max(15).optional(),
-                })
-              ),
-            })
-          ),
-        })
-        .describe('Composition data'),
-    },
-    async (args) => {
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    if (request.params.uri === RESOURCE_URI) {
+      return {
+        contents: [{ uri: RESOURCE_URI, mimeType: 'text/html', text: htmlContent }],
+      };
+    }
+    throw new McpError(ErrorCode.InvalidRequest, `Unknown resource: ${request.params.uri}`);
+  });
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      {
+        name: 'create_midi',
+        description: `Generate a MIDI file from structured composition data with chord support.\nSupports single notes, note arrays (chords), and chord names (${chordQualities.slice(0, 10).join(', ')}, etc.).\nReturns base64-encoded MIDI data and triggers a preview UI for playback and notation display.`,
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            title: { type: 'string', description: 'Title of the composition' },
+            composition: {
+              type: 'object',
+              description: 'Composition data',
+              properties: {
+                bpm: { type: 'number', description: 'Tempo in BPM (20-300)' },
+                tempo: { type: 'number', description: 'Alias for bpm' },
+                timeSignature: {
+                  type: 'object',
+                  properties: { numerator: { type: 'number' }, denominator: { type: 'number' } },
+                },
+                tracks: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      instrument: { type: 'number', description: 'GM MIDI instrument (0-127)' },
+                      notes: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            pitch: {
+                              description: 'MIDI note number, note name, or array for chord',
+                              oneOf: [
+                                { type: 'number' },
+                                { type: 'string' },
+                                {
+                                  type: 'array',
+                                  items: { oneOf: [{ type: 'number' }, { type: 'string' }] },
+                                },
+                              ],
+                            },
+                            chord: { type: 'string', description: 'Chord name (e.g., "Cmaj7")' },
+                            beat: {
+                              type: 'number',
+                              description: 'Beat position (1.0 = first beat)',
+                            },
+                            startTime: { type: 'number' },
+                            duration: { oneOf: [{ type: 'string' }, { type: 'number' }] },
+                            velocity: { type: 'number' },
+                            channel: { type: 'number' },
+                          },
+                          required: ['duration'],
+                        },
+                      },
+                    },
+                    required: ['notes'],
+                  },
+                },
+              },
+              required: ['bpm', 'tracks'],
+            },
+          },
+          required: ['title', 'composition'],
+        },
+      },
+      {
+        name: 'parse_chord',
+        description: 'Parse a chord name and return its component MIDI pitches.',
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            chord: { type: 'string', description: 'Chord name (e.g., "Cmaj7")' },
+            octave: { type: 'number', description: 'Octave (default: 4)' },
+          },
+          required: ['chord'],
+        },
+      },
+    ],
+  }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+
+    if (name === 'create_midi') {
       try {
-        const composition = preprocessComposition(args.composition as MidiComposition);
+        const typedArgs = args as { title: string; composition: MidiComposition };
+        const composition = preprocessComposition(typedArgs.composition);
         const midiBase64 = generateMidiBase64(composition);
 
         return {
           content: [
             {
               type: 'text' as const,
-              text: `MIDI file "${args.title}" generated successfully. ${composition.tracks.length} track(s), ${composition.bpm} BPM.`,
+              text: `MIDI file "${typedArgs.title}" generated successfully. ${composition.tracks.length} track(s), ${composition.bpm} BPM.`,
             },
             {
               type: 'resource' as const,
@@ -226,9 +288,7 @@ Returns base64-encoded MIDI data and triggers a preview UI for playback and nota
               },
             },
           ],
-          _meta: {
-            ui: { resourceUri },
-          },
+          _meta: { ui: { resourceUri: RESOURCE_URI } },
         };
       } catch (error) {
         return {
@@ -237,24 +297,17 @@ Returns base64-encoded MIDI data and triggers a preview UI for playback and nota
         };
       }
     }
-  );
 
-  server.tool(
-    'parse_chord',
-    'Parse a chord name and return its component MIDI pitches.',
-    {
-      chord: z.string(),
-      octave: z.number().min(0).max(8).optional(),
-    },
-    async (args) => {
+    if (name === 'parse_chord') {
       try {
-        const midiNumbers = parseChordName(args.chord, args.octave ?? 4);
+        const typedArgs = args as { chord: string; octave?: number };
+        const midiNumbers = parseChordName(typedArgs.chord, typedArgs.octave ?? 4);
         const noteNames = midiNumbers.map(midiNumberToNoteName);
         return {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify({ chord: args.chord, midiNumbers, noteNames }, null, 2),
+              text: JSON.stringify({ chord: typedArgs.chord, midiNumbers, noteNames }, null, 2),
             },
           ],
         };
@@ -265,9 +318,22 @@ Returns base64-encoded MIDI data and triggers a preview UI for playback and nota
         };
       }
     }
-  );
+
+    throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+  });
 
   return server;
+}
+
+// ---------- CORS Helper ----------
+
+function corsHeaders(): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Accept, mcp-session-id, mcp-protocol-version',
+    'Access-Control-Expose-Headers': 'mcp-session-id',
+  };
 }
 
 // ---------- Cloudflare Workers Fetch Handler ----------
@@ -278,105 +344,47 @@ export default {
 
     // CORS preflight
     if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, mcp-session-id',
-          'Access-Control-Expose-Headers': 'mcp-session-id',
-        },
-      });
+      return new Response(null, { status: 204, headers: corsHeaders() });
     }
 
     // Health check
     if (request.method === 'GET' && url.pathname === '/health') {
       return Response.json(
         { status: 'ok', name: 'midi-mcp-server', version: '0.2.0' },
-        {
-          headers: { 'Access-Control-Allow-Origin': '*' },
-        }
+        { headers: corsHeaders() }
       );
     }
 
     // MCP endpoint
     if (url.pathname === '/mcp' || url.pathname === '/') {
       const server = createWorkerServer();
-      const transport = new StreamableHTTPServerTransport({
+      const transport = new WebStandardStreamableHTTPServerTransport({
         sessionIdGenerator: undefined, // stateless
+        enableJsonResponse: true,
       });
 
       await server.connect(transport);
 
-      // Convert the Request to a node-like req/res and handle
-      // For Workers, we need to adapt the transport
-      const body = await request.text();
-      const headers: Record<string, string> = {};
-      request.headers.forEach((value, key) => {
-        headers[key] = value;
-      });
+      try {
+        const response = await transport.handleRequest(request);
 
-      // Create a promise-based response handler
-      return new Promise<Response>((resolve) => {
-        const chunks: string[] = [];
-        let statusCode = 200;
-        const responseHeaders: Record<string, string> = {
-          'Access-Control-Allow-Origin': '*',
-        };
+        // Add CORS headers to the response
+        const headers = new Headers(response.headers);
+        Object.entries(corsHeaders()).forEach(([key, value]) => {
+          headers.set(key, value);
+        });
 
-        const mockRes = {
-          writeHead(code: number, hdrs?: Record<string, string>) {
-            statusCode = code;
-            if (hdrs) {
-              Object.entries(hdrs).forEach(([k, v]) => {
-                responseHeaders[k] = v;
-              });
-            }
-          },
-          setHeader(key: string, value: string) {
-            responseHeaders[key] = value;
-          },
-          getHeader(key: string) {
-            return responseHeaders[key];
-          },
-          write(chunk: string) {
-            chunks.push(chunk);
-            return true;
-          },
-          end(data?: string) {
-            if (data) chunks.push(data);
-            resolve(
-              new Response(chunks.join(''), {
-                status: statusCode,
-                headers: responseHeaders,
-              })
-            );
-          },
-          on(_event: string, _handler: () => void) {
-            // no-op for close event in workers
-          },
-        };
-
-        const mockReq = {
-          method: request.method,
-          url: url.pathname,
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
           headers,
-          on(event: string, handler: (data?: string) => void) {
-            if (event === 'data') handler(body);
-            if (event === 'end') handler();
-          },
-        };
-
-        transport.handleRequest(mockReq as never, mockRes as never);
-      });
+        });
+      } finally {
+        await transport.close();
+        await server.close();
+      }
     }
 
-    return new Response(JSON.stringify({ error: 'Not found' }), {
-      status: 404,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-    });
+    return Response.json({ error: 'Not found' }, { status: 404, headers: corsHeaders() });
   },
 };
