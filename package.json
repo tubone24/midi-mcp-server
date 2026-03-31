@@ -5,9 +5,11 @@
   "main": "build/index.js",
   "type": "module",
   "scripts": {
-    "clean": "rm -rf build",
-    "build": "npm run clean && tsc && chmod +x build/index.js",
-    "build:worker": "npx wrangler deploy --dry-run --outdir=dist",
+    "clean": "rm -rf build dist",
+    "build:ui": "vite build --config vite.config.mcp-app.ts",
+    "build:server": "tsc && chmod +x build/index.js",
+    "build": "npm run clean && npm run build:ui && npm run build:server",
+    "build:worker": "npx wrangler deploy --dry-run --outdir=dist-worker",
     "start": "node build/index.js",
     "start:stdio": "node build/index.js --stdio",
     "start:http": "node build/index.js --http",
@@ -22,6 +24,7 @@
     "format:check": "prettier --check \"src/**/*.ts\""
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.3.2",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "midi-writer-js": "^3.1.1",
     "zod": "^3.23.0"
@@ -37,6 +40,8 @@
     "eslint-plugin-prettier": "^5.1.3",
     "prettier": "^3.2.5",
     "typescript": "^5.0.0",
+    "vite": "^8.0.3",
+    "vite-plugin-singlefile": "^2.3.2",
     "vitest": "^1.3.1",
     "wrangler": "^3.100.0"
   }

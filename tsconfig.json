@@ -13,5 +13,12 @@
     "sourceMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["src/**/*.test.ts", "src/**/__tests__/**", "src/worker.ts"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/__tests__/**",
+    "src/worker.ts",
+    "src/mcp-app.ts",
+    "src/mcp-app.html",
+    "src/mcp-app.css"
+  ]
 }

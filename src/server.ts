@@ -1,12 +1,11 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { readFileSync } from 'fs';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
-  CallToolRequestSchema,
-  ErrorCode,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  McpError,
-  ReadResourceRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+  registerAppTool,
+  registerAppResource,
+  RESOURCE_MIME_TYPE,
+} from '@modelcontextprotocol/ext-apps/server';
+import { z } from 'zod';
 import MidiWriter from 'midi-writer-js';
 import {
   resolvePitches,
@@ -15,7 +14,16 @@ import {
   parseChordName,
   midiNumberToNoteName,
 } from './chord-utils.js';
-import { getMcpAppHtml } from './ui-html.js';
+
+// ---------- Load built HTML at module level ----------
+
+let builtHtml: string;
+try {
+  builtHtml = readFileSync(new URL('../dist/src/mcp-app.html', import.meta.url), 'utf-8');
+} catch {
+  builtHtml =
+    '<!DOCTYPE html><html><body><p>MIDI Preview UI not built. Run: npm run build:ui</p></body></html>';
+}
 
 // ---------- Interfaces ----------
 
@@ -115,7 +123,6 @@ export function generateMidiBase64(composition: MidiComposition): string {
   // @ts-expect-error - Writer is not properly exported in type definitions
   const writer = new MidiWriter.Writer(tracks);
   const fileData: Uint8Array = writer.buildFile();
-  // Convert Uint8Array to base64 string
   let binary = '';
   for (let i = 0; i < fileData.length; i++) {
     binary += String.fromCharCode(fileData[i]);
@@ -152,13 +159,12 @@ function preprocessComposition(raw: MidiComposition): MidiComposition {
 
 // ---------- MCP Server Factory ----------
 
-const RESOURCE_URI = 'ui://midi-preview/app';
+const RESOURCE_URI = 'ui://midi-preview/app.html';
 
-export function createServer(): Server {
+export function createServer(): McpServer {
   const chordQualities = getSupportedChordQualities();
-  const htmlContent = getMcpAppHtml();
 
-  const server = new Server(
+  const server = new McpServer(
     {
       name: 'midi-mcp-server',
       version: '0.2.0',
@@ -171,163 +177,47 @@ export function createServer(): Server {
     }
   );
 
-  // --- List Resources ---
-  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: [
+  // --- Register App Resource (preview UI HTML) ---
+  registerAppResource(server, 'MIDI Preview', RESOURCE_URI, {}, async () => ({
+    contents: [
       {
         uri: RESOURCE_URI,
-        name: 'MIDI Preview App',
-        description: 'Interactive MIDI preview with piano-roll notation and audio playback',
-        mimeType: 'text/html',
+        mimeType: RESOURCE_MIME_TYPE,
+        text: builtHtml,
       },
     ],
   }));
 
-  // --- Read Resource ---
-  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    if (request.params.uri === RESOURCE_URI) {
-      return {
-        contents: [
-          {
-            uri: RESOURCE_URI,
-            mimeType: 'text/html',
-            text: htmlContent,
-          },
-        ],
-      };
-    }
-    throw new McpError(ErrorCode.InvalidRequest, `Unknown resource: ${request.params.uri}`);
-  });
-
-  // --- List Tools ---
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      {
-        name: 'create_midi',
-        description: `Generate a MIDI file from structured composition data with chord support.\nSupports single notes, note arrays (chords), and chord names (${chordQualities.slice(0, 10).join(', ')}, etc.).\nReturns base64-encoded MIDI data and triggers a preview UI for playback and notation display.`,
-        inputSchema: {
-          type: 'object' as const,
-          properties: {
-            title: { type: 'string', description: 'Title of the composition' },
-            composition: {
-              type: 'object',
-              description: 'Composition data',
-              properties: {
-                bpm: { type: 'number', description: 'Tempo in BPM (20-300)' },
-                tempo: { type: 'number', description: 'Alias for bpm' },
-                timeSignature: {
-                  type: 'object',
-                  properties: {
-                    numerator: { type: 'number' },
-                    denominator: { type: 'number' },
-                  },
-                },
-                tracks: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      name: { type: 'string', description: 'Track name' },
-                      instrument: {
-                        type: 'number',
-                        description: 'GM MIDI instrument (0-127)',
-                      },
-                      notes: {
-                        type: 'array',
-                        items: {
-                          type: 'object',
-                          properties: {
-                            pitch: {
-                              description:
-                                'MIDI note number (0-127), note name ("C4"), or array of pitches for chord',
-                              oneOf: [
-                                { type: 'number' },
-                                { type: 'string' },
-                                {
-                                  type: 'array',
-                                  items: { oneOf: [{ type: 'number' }, { type: 'string' }] },
-                                },
-                              ],
-                            },
-                            chord: {
-                              type: 'string',
-                              description:
-                                'Chord name (e.g., "Cmaj7", "Dm", "G7") - expands to pitches',
-                            },
-                            beat: {
-                              type: 'number',
-                              description: 'Beat position (1.0 = first beat, 1.5 = between beats)',
-                            },
-                            startTime: { type: 'number', description: 'Start time in ticks' },
-                            duration: {
-                              description:
-                                "Note duration: '1'=whole, '2'=half, '4'=quarter, '8'=eighth, '16'=16th, 'd4'=dotted quarter, 'T4'=triplet quarter",
-                              oneOf: [{ type: 'string' }, { type: 'number' }],
-                            },
-                            velocity: {
-                              type: 'number',
-                              description: 'Note velocity (0-127, default: 100)',
-                            },
-                            channel: {
-                              type: 'number',
-                              description: 'MIDI channel (0-15)',
-                            },
-                          },
-                          required: ['duration'],
-                        },
-                      },
-                    },
-                    required: ['notes'],
-                  },
-                },
-              },
-              required: ['bpm', 'tracks'],
-            },
-          },
-          required: ['title', 'composition'],
-        },
+  // --- Register App Tool: create_midi ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (registerAppTool as any)(
+    server,
+    'create_midi',
+    {
+      title: 'Create MIDI',
+      description: `Generate a MIDI file from structured composition data with chord support.\nSupports single notes, note arrays (chords), and chord names (${chordQualities.slice(0, 10).join(', ')}, etc.).\nReturns base64-encoded MIDI data and displays an interactive preview with piano-roll notation and playback.`,
+      inputSchema: {
+        title: z.string().describe('Title of the composition'),
+        composition: z
+          .any()
+          .describe(
+            'Composition object with bpm (number), optional timeSignature ({numerator, denominator}), and tracks (array of {name?, instrument?, notes: [{pitch, chord?, beat?, startTime?, duration, velocity?, channel?}]})'
+          ),
       },
-      {
-        name: 'parse_chord',
-        description:
-          'Parse a chord name and return its component MIDI pitches. Useful for understanding chord voicings.',
-        inputSchema: {
-          type: 'object' as const,
-          properties: {
-            chord: {
-              type: 'string',
-              description: 'Chord name (e.g., "Cmaj7", "Dm", "F#m7", "G7sus4")',
-            },
-            octave: {
-              type: 'number',
-              description: 'Octave for the root note (default: 4)',
-            },
-          },
-          required: ['chord'],
-        },
+      _meta: {
+        ui: { resourceUri: RESOURCE_URI },
       },
-    ],
-  }));
-
-  // --- Call Tool ---
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-
-    if (name === 'create_midi') {
+    },
+    async ({ title, composition: rawComposition }: { title: string; composition: unknown }) => {
       try {
-        const typedArgs = args as {
-          title: string;
-          composition: MidiComposition;
-        };
-
-        const composition = preprocessComposition(typedArgs.composition);
+        const composition = preprocessComposition(rawComposition as MidiComposition);
         const midiBase64 = generateMidiBase64(composition);
 
         return {
           content: [
             {
               type: 'text' as const,
-              text: `MIDI file "${typedArgs.title}" generated successfully. ${composition.tracks.length} track(s), ${composition.bpm} BPM.`,
+              text: `MIDI file "${title}" generated successfully. ${composition.tracks.length} track(s), ${composition.bpm} BPM.`,
             },
             {
               type: 'resource' as const,
@@ -338,11 +228,6 @@ export function createServer(): Server {
               },
             },
           ],
-          _meta: {
-            ui: {
-              resourceUri: RESOURCE_URI,
-            },
-          },
         };
       } catch (error) {
         return {
@@ -356,27 +241,27 @@ export function createServer(): Server {
         };
       }
     }
+  );
 
-    if (name === 'parse_chord') {
+  // --- Register Tool: parse_chord (non-UI tool) ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (server.tool as any)(
+    'parse_chord',
+    'Parse a chord name and return its component MIDI pitches. Useful for understanding chord voicings.',
+    {
+      chord: z.string().describe('Chord name (e.g., "Cmaj7", "Dm", "F#m7", "G7sus4")'),
+      octave: z.number().optional().describe('Octave for the root note (default: 4)'),
+    },
+    async ({ chord, octave }: { chord: string; octave?: number }) => {
       try {
-        const typedArgs = args as { chord: string; octave?: number };
-        const midiNumbers = parseChordName(typedArgs.chord, typedArgs.octave ?? 4);
+        const midiNumbers = parseChordName(chord, octave ?? 4);
         const noteNames = midiNumbers.map(midiNumberToNoteName);
 
         return {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify(
-                {
-                  chord: typedArgs.chord,
-                  octave: typedArgs.octave ?? 4,
-                  midiNumbers,
-                  noteNames,
-                },
-                null,
-                2
-              ),
+              text: JSON.stringify({ chord, octave: octave ?? 4, midiNumbers, noteNames }, null, 2),
             },
           ],
         };
@@ -392,11 +277,7 @@ export function createServer(): Server {
         };
       }
     }
-
-    throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
-  });
-
-  server.onerror = (error) => console.error('[MCP Error]', error);
+  );
 
   return server;
 }

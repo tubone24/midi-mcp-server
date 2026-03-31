@@ -145,7 +145,6 @@ describe('MIDI MCP Server', () => {
         ],
       };
 
-      // Should not throw
       const result = generateMidiBase64(composition);
       expect(typeof result).toBe('string');
     });

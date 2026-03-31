@@ -25,7 +25,10 @@ import {
   parseChordName,
   midiNumberToNoteName,
 } from './chord-utils.js';
-import { getMcpAppHtml } from './ui-html.js';
+// The built HTML is imported as a text module by Wrangler.
+// After running `npm run build:ui`, the file exists at dist/src/mcp-app.html.
+// Wrangler bundles it as a text module via the rule in wrangler.toml.
+import builtHtml from '../dist/src/mcp-app.html';
 
 // ---------- Types ----------
 
@@ -156,7 +159,7 @@ const RESOURCE_URI = 'ui://midi-preview/app';
 
 function createWorkerServer(): Server {
   const chordQualities = getSupportedChordQualities();
-  const htmlContent = getMcpAppHtml();
+  const htmlContent = builtHtml;
 
   const server = new Server(
     { name: 'midi-mcp-server', version: '0.2.0' },
@@ -169,7 +172,7 @@ function createWorkerServer(): Server {
         uri: RESOURCE_URI,
         name: 'MIDI Preview App',
         description: 'Interactive MIDI preview with piano-roll notation and audio playback',
-        mimeType: 'text/html',
+        mimeType: 'text/html;profile=mcp-app',
       },
     ],
   }));
@@ -177,7 +180,7 @@ function createWorkerServer(): Server {
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     if (request.params.uri === RESOURCE_URI) {
       return {
-        contents: [{ uri: RESOURCE_URI, mimeType: 'text/html', text: htmlContent }],
+        contents: [{ uri: RESOURCE_URI, mimeType: 'text/html;profile=mcp-app', text: htmlContent }],
       };
     }
     throw new McpError(ErrorCode.InvalidRequest, `Unknown resource: ${request.params.uri}`);
@@ -247,6 +250,10 @@ function createWorkerServer(): Server {
             },
           },
           required: ['title', 'composition'],
+        },
+        _meta: {
+          ui: { resourceUri: RESOURCE_URI },
+          'ui/resourceUri': RESOURCE_URI,
         },
       },
       {
