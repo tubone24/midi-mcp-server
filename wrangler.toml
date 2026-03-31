@@ -5,3 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [observability]
 enabled = true
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]

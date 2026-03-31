@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIDI Preview</title>
+<link rel="stylesheet" href="./mcp-app.css">
+</head>
+<body>
+<h2 id="title">MIDI Preview</h2>
+
+<div class="controls">
+  <button id="btn-play" disabled>Play</button>
+  <button id="btn-stop" class="stop" disabled>Stop</button>
+  <span class="tempo-display" id="tempo-display"></span>
+</div>
+
+<div class="progress-bar"><div class="fill" id="progress-fill"></div></div>
+
+<div id="notation"><p class="status">Waiting for MIDI data...</p></div>
+
+<div id="track-list"></div>
+
+<div class="status" id="status-text"></div>
+
+<script type="module" src="./mcp-app.ts"></script>
+</body>
+</html>
