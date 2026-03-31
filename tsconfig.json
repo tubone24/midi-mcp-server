@@ -7,8 +7,11 @@
     "outDir": "build",
     "strict": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["src/**/*.test.ts", "src/**/__tests__/**"]
+  "exclude": ["src/**/*.test.ts", "src/**/__tests__/**", "src/worker.ts"]
 }
