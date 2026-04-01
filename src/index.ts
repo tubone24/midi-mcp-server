@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createServer } from './server.js';
+import { createServer, getPreviewPageHtml, getLatestPreviewData } from './server.js';
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -20,6 +20,8 @@ async function runStdio() {
 }
 
 async function runHttp() {
+  const baseUrl = `http://localhost:${port}`;
+
   const httpServer = http.createServer(async (req, res) => {
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -43,9 +45,49 @@ async function runHttp() {
       return;
     }
 
+    // --- Preview UI (browser) ---
+    if (req.method === 'GET' && req.url === '/preview') {
+      const html = getPreviewPageHtml();
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(html);
+      return;
+    }
+
+    // --- API: get latest composition data ---
+    if (req.method === 'GET' && req.url === '/api/composition') {
+      const data = getLatestPreviewData();
+      if (data.composition) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'No composition available yet' }));
+      }
+      return;
+    }
+
+    // --- API: download latest MIDI ---
+    if (req.method === 'GET' && req.url === '/api/midi') {
+      const data = getLatestPreviewData();
+      if (data.midi) {
+        const buffer = Buffer.from(data.midi, 'base64');
+        const filename = (data.title || 'composition').replace(/[^a-zA-Z0-9_-]/g, '_') + '.mid';
+        res.writeHead(200, {
+          'Content-Type': 'audio/midi',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': String(buffer.length),
+        });
+        res.end(buffer);
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'No MIDI available yet' }));
+      }
+      return;
+    }
+
     // MCP endpoint
     if (req.url === '/mcp' || req.url === '/') {
-      const server = createServer();
+      const server = createServer(baseUrl);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined, // stateless mode
       });
@@ -66,8 +108,9 @@ async function runHttp() {
 
   httpServer.listen(port, () => {
     console.error(`MIDI MCP server running on HTTP port ${port}`);
-    console.error(`  MCP endpoint: http://localhost:${port}/mcp`);
-    console.error(`  Health check: http://localhost:${port}/health`);
+    console.error(`  MCP endpoint: ${baseUrl}/mcp`);
+    console.error(`  Preview UI:   ${baseUrl}/preview`);
+    console.error(`  Health check: ${baseUrl}/health`);
   });
 }
 
