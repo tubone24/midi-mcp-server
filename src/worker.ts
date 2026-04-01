@@ -28,7 +28,7 @@ import {
 // The built HTML is imported as a text module by Wrangler.
 // After running `npm run build:ui`, the file exists at dist/src/mcp-app.html.
 // Wrangler bundles it as a text module via the rule in wrangler.toml.
-import builtHtml from '../dist/src/mcp-app.html';
+import builtHtml from '../dist/mcp-app.html';
 
 // ---------- Types ----------
 

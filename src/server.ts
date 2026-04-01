@@ -14,13 +14,12 @@ import {
   parseChordName,
   midiNumberToNoteName,
 } from './chord-utils.js';
-import { getPreviewHtml } from './preview-html.js';
 
 // ---------- Load built HTML at module level ----------
 
 let builtHtml: string;
 try {
-  builtHtml = readFileSync(new URL('../dist/src/mcp-app.html', import.meta.url), 'utf-8');
+  builtHtml = readFileSync(new URL('../dist/mcp-app.html', import.meta.url), 'utf-8');
 } catch {
   builtHtml =
     '<!DOCTYPE html><html><body><p>MIDI Preview UI not built. Run: npm run build:ui</p></body></html>';
@@ -55,27 +54,6 @@ export interface MidiComposition {
   tempo?: number;
   timeSignature?: TimeSignature;
   tracks: MidiTrack[];
-}
-
-// ---------- Shared state for HTTP preview ----------
-
-let latestComposition: MidiComposition | null = null;
-let latestMidiBase64: string | null = null;
-let latestTitle: string | null = null;
-
-export function getLatestPreviewData(): {
-  composition: MidiComposition | null;
-  midi: string | null;
-  title: string | null;
-} {
-  return { composition: latestComposition, midi: latestMidiBase64, title: latestTitle };
-}
-
-export function getPreviewPageHtml(): string {
-  if (latestComposition) {
-    return getPreviewHtml(JSON.stringify(latestComposition), latestMidiBase64 ?? undefined);
-  }
-  return getPreviewHtml();
 }
 
 // ---------- MIDI Generation (in-memory, no fs) ----------
@@ -183,7 +161,7 @@ function preprocessComposition(raw: MidiComposition): MidiComposition {
 
 const RESOURCE_URI = 'ui://midi-preview/app.html';
 
-export function createServer(previewBaseUrl?: string): McpServer {
+export function createServer(): McpServer {
   const chordQualities = getSupportedChordQualities();
 
   const server = new McpServer(
@@ -200,15 +178,21 @@ export function createServer(previewBaseUrl?: string): McpServer {
   );
 
   // --- Register App Resource (preview UI HTML) ---
-  registerAppResource(server, 'MIDI Preview', RESOURCE_URI, {}, async () => ({
-    contents: [
-      {
-        uri: RESOURCE_URI,
-        mimeType: RESOURCE_MIME_TYPE,
-        text: builtHtml,
-      },
-    ],
-  }));
+  registerAppResource(
+    server,
+    RESOURCE_URI,
+    RESOURCE_URI,
+    { mimeType: RESOURCE_MIME_TYPE, description: 'MIDI Preview and Playback UI' },
+    async () => ({
+      contents: [
+        {
+          uri: RESOURCE_URI,
+          mimeType: RESOURCE_MIME_TYPE,
+          text: builtHtml,
+        },
+      ],
+    })
+  );
 
   // --- Register App Tool: create_midi ---
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -235,29 +219,11 @@ export function createServer(previewBaseUrl?: string): McpServer {
         const composition = preprocessComposition(rawComposition as MidiComposition);
         const midiBase64 = generateMidiBase64(composition);
 
-        // Store for HTTP preview
-        latestComposition = composition;
-        latestMidiBase64 = midiBase64;
-        latestTitle = title;
-
-        const previewUrl = previewBaseUrl ? `${previewBaseUrl}/preview` : null;
-        const previewNote = previewUrl
-          ? `\nPreview & playback: ${previewUrl}`
-          : '\nNote: Run with --http flag to enable browser preview at /preview';
-
         return {
           content: [
             {
               type: 'text' as const,
-              text: `MIDI file "${title}" generated successfully. ${composition.tracks.length} track(s), ${composition.bpm} BPM.${previewNote}`,
-            },
-            {
-              type: 'resource' as const,
-              resource: {
-                uri: `data:audio/midi;base64,${midiBase64}`,
-                mimeType: 'audio/midi',
-                text: midiBase64,
-              },
+              text: `MIDI file "${title}" generated successfully. ${composition.tracks.length} track(s), ${composition.bpm} BPM.\nMIDI data (base64): ${midiBase64.slice(0, 100)}...`,
             },
           ],
         };
