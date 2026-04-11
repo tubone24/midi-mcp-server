@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "midi-mcp-server" generated at 2026-04-11T13:28:51.878Z.
