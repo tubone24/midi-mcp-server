@@ -29,6 +29,14 @@ import {
 // After running `npm run build:ui`, the file exists at dist/src/mcp-app.html.
 // Wrangler bundles it as a text module via the rule in wrangler.toml.
 import builtHtml from '../dist/src/mcp-app.html';
+// Music theory resources are imported as text modules via the **/*.md rule in wrangler.toml.
+import harmonyMd from './resources/harmony.md';
+import chordProgressionsMd from './resources/chord-progressions.md';
+import counterpointMd from './resources/counterpoint.md';
+import modesScalesMd from './resources/modes-scales.md';
+import orchestrationMd from './resources/orchestration.md';
+import rhythmPatternsMd from './resources/rhythm-patterns.md';
+import voiceLeadingMd from './resources/voice-leading.md';
 
 // ---------- Types ----------
 
@@ -153,6 +161,55 @@ function preprocessComposition(raw: MidiComposition): MidiComposition {
   return composition;
 }
 
+// ---------- Music Theory Resources ----------
+
+const MUSIC_THEORY_RESOURCES = [
+  {
+    name: 'Harmony & Music Theory',
+    uri: 'music-theory://harmony',
+    description: 'Intervals, chord types, diatonic chords, cadences, and voice leading rules',
+    content: harmonyMd,
+  },
+  {
+    name: 'Chord Progressions',
+    uri: 'music-theory://chord-progressions',
+    description: 'Common progressions by mood/genre, substitutions, and modulation strategies',
+    content: chordProgressionsMd,
+  },
+  {
+    name: 'Counterpoint',
+    uri: 'music-theory://counterpoint',
+    description: "Species counterpoint rules (Fux's five species), consonance/dissonance, motion types",
+    content: counterpointMd,
+  },
+  {
+    name: 'Modes & Scales',
+    uri: 'music-theory://modes-scales',
+    description: 'Seven diatonic modes, minor scale variants, pentatonic/blues scales, genre guide',
+    content: modesScalesMd,
+  },
+  {
+    name: 'Orchestration',
+    uri: 'music-theory://orchestration',
+    description: 'Instrument ranges, GM program numbers, four-part harmony ranges, texture types',
+    content: orchestrationMd,
+  },
+  {
+    name: 'Rhythm Patterns',
+    uri: 'music-theory://rhythm-patterns',
+    description: 'Time signatures, MIDI duration reference, genre grooves, velocity and tempo guides',
+    content: rhythmPatternsMd,
+  },
+  {
+    name: 'Voice Leading',
+    uri: 'music-theory://voice-leading',
+    description: 'Forbidden parallels, chord voicing strategies, non-chord tones, MIDI tips',
+    content: voiceLeadingMd,
+  },
+] as const;
+
+const theoryResourceMap = new Map(MUSIC_THEORY_RESOURCES.map((r) => [r.uri, r.content]));
+
 // ---------- Server Factory ----------
 
 const RESOURCE_URI = 'ui://midi-preview/app';
@@ -174,6 +231,12 @@ function createWorkerServer(): Server {
         description: 'Interactive MIDI preview with piano-roll notation and audio playback',
         mimeType: 'text/html;profile=mcp-app',
       },
+      ...MUSIC_THEORY_RESOURCES.map((r) => ({
+        uri: r.uri,
+        name: r.name,
+        description: r.description,
+        mimeType: 'text/markdown',
+      })),
     ],
   }));
 
@@ -181,6 +244,12 @@ function createWorkerServer(): Server {
     if (request.params.uri === RESOURCE_URI) {
       return {
         contents: [{ uri: RESOURCE_URI, mimeType: 'text/html;profile=mcp-app', text: htmlContent }],
+      };
+    }
+    const theoryContent = theoryResourceMap.get(request.params.uri);
+    if (theoryContent !== undefined) {
+      return {
+        contents: [{ uri: request.params.uri, mimeType: 'text/markdown', text: theoryContent }],
       };
     }
     throw new McpError(ErrorCode.InvalidRequest, `Unknown resource: ${request.params.uri}`);

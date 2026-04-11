@@ -9,3 +9,7 @@ enabled = true
 [[rules]]
 type = "Text"
 globs = ["**/*.html"]
+
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
