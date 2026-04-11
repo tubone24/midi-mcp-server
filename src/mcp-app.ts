@@ -512,15 +512,6 @@ function generateMidiBase64(composition: CompositionData): string {
   return btoa(b);
 }
 
-function downloadBlob(base64: string, mimeType: string, filename: string) {
-  const bin = atob(base64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
-  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 // ---------- Minimal Markdown Renderer ----------
 
@@ -719,11 +710,21 @@ btnStop.addEventListener('click', () => {
 
 // ---------- Download ----------
 
-btnDownload.addEventListener('click', () => {
+btnDownload.addEventListener('click', async () => {
   if (!currentMidiBase64) return;
   const title = (titleEl.textContent || 'midi').replace(/[^a-zA-Z0-9_\- ]/g, '_');
-  downloadBlob(currentMidiBase64, 'audio/midi', `${title}.mid`);
-  app.sendLog({ level: 'info', data: `Downloaded: ${title}.mid`, logger: 'midi-preview' });
+  const filename = `${title}.mid`;
+  await app.downloadFile({
+    contents: [{
+      type: 'resource',
+      resource: {
+        uri: `file:///${filename}`,
+        mimeType: 'audio/midi',
+        blob: currentMidiBase64,
+      },
+    }],
+  });
+  app.sendLog({ level: 'info', data: `Downloaded: ${filename}`, logger: 'midi-preview' });
 });
 
 // ---------- Fullscreen ----------
