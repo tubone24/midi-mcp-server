@@ -11,7 +11,7 @@ https://midi-mcp-server.tubone24.workers.dev
 
 If you configure it on an MCP host that supports MCP Apps such as Claude.ai, you can create music whilst visualising the MIDI creation process.
 
-
+![demo](./docs/output.gif)
 
 **Another implementation method uses Agent Skills. This approach can compose better songs with less context.**
 
