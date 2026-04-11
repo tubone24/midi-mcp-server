@@ -7,12 +7,17 @@
 <link rel="stylesheet" href="./mcp-app.css">
 </head>
 <body>
-<h2 id="title">MIDI Preview</h2>
+<div class="title-row">
+  <h2 id="title">MIDI Preview</h2>
+  <button id="btn-ask-claude" class="secondary-btn" disabled title="Ask Claude to extend this piece">Ask Claude ✦</button>
+</div>
 
 <div class="controls">
-  <button id="btn-play" disabled>Play</button>
-  <button id="btn-stop" class="stop" disabled>Stop</button>
+  <button id="btn-play" disabled>▶ Play</button>
+  <button id="btn-stop" class="stop" disabled>■ Stop</button>
   <span class="tempo-display" id="tempo-display"></span>
+  <button id="btn-download" class="download" disabled title="Download MIDI file">↓ MIDI</button>
+  <button id="btn-fullscreen" class="icon-btn" title="Enter fullscreen">⛶</button>
 </div>
 
 <div class="progress-bar"><div class="fill" id="progress-fill"></div></div>
@@ -22,6 +27,35 @@
 <div id="track-list"></div>
 
 <div class="status" id="status-text"></div>
+
+<!-- Chord Analyzer Panel -->
+<details class="panel" id="chord-panel">
+  <summary>🎵 Chord Analyzer</summary>
+  <div class="panel-content">
+    <div class="chord-input-row">
+      <input id="chord-input" type="text" placeholder="e.g. Cmaj7, Dm, F#m7b5, Gsus4" autocomplete="off" spellcheck="false" />
+      <select id="chord-octave">
+        <option value="2">Oct 2</option>
+        <option value="3">Oct 3</option>
+        <option value="4" selected>Oct 4</option>
+        <option value="5">Oct 5</option>
+      </select>
+      <button id="btn-analyze">Analyze</button>
+    </div>
+    <div id="chord-result" class="chord-result"></div>
+  </div>
+</details>
+
+<!-- Music Theory Reference Panel -->
+<details class="panel" id="theory-panel">
+  <summary>📚 Music Theory Reference</summary>
+  <div class="panel-content">
+    <select id="theory-select">
+      <option value="">— Select a reference —</option>
+    </select>
+    <div id="theory-content" class="theory-content"></div>
+  </div>
+</details>
 
 <script type="module" src="./mcp-app.ts"></script>
 </body>

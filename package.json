@@ -7,7 +7,7 @@
   "scripts": {
     "clean": "rm -rf build dist",
     "build:ui": "vite build --config vite.config.mcp-app.ts",
-    "build:server": "tsc && chmod +x build/index.js",
+    "build:server": "tsc && chmod +x build/index.js && cp -r src/resources build/resources",
     "build": "npm run clean && npm run build:ui && npm run build:server",
     "build:worker": "npx wrangler deploy --dry-run --outdir=dist-worker",
     "start": "node build/index.js",

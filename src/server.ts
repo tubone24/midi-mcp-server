@@ -5,6 +5,8 @@ import {
   registerAppResource,
   RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server';
+import { fileURLToPath } from 'url';
+import { join, dirname } from 'path';
 import { z } from 'zod';
 import MidiWriter from 'midi-writer-js';
 import {
@@ -24,6 +26,64 @@ try {
   builtHtml =
     '<!DOCTYPE html><html><body><p>MIDI Preview UI not built. Run: npm run build:ui</p></body></html>';
 }
+
+// ---------- Load music theory resources ----------
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+function loadResource(filename: string): string {
+  try {
+    return readFileSync(join(__dirname, 'resources', filename), 'utf-8');
+  } catch {
+    return `# Resource Not Found\n\nCould not load ${filename}.`;
+  }
+}
+
+const MUSIC_THEORY_RESOURCES = [
+  {
+    name: 'Harmony & Music Theory',
+    uri: 'music-theory://harmony',
+    description: 'Intervals, chord types, diatonic chords, cadences, and voice leading rules',
+    file: 'harmony.md',
+  },
+  {
+    name: 'Chord Progressions',
+    uri: 'music-theory://chord-progressions',
+    description: 'Common progressions by mood/genre, substitutions, and modulation strategies',
+    file: 'chord-progressions.md',
+  },
+  {
+    name: 'Counterpoint',
+    uri: 'music-theory://counterpoint',
+    description: "Species counterpoint rules (Fux's five species), consonance/dissonance, motion types",
+    file: 'counterpoint.md',
+  },
+  {
+    name: 'Modes & Scales',
+    uri: 'music-theory://modes-scales',
+    description: 'Seven diatonic modes, minor scale variants, pentatonic/blues scales, genre guide',
+    file: 'modes-scales.md',
+  },
+  {
+    name: 'Orchestration',
+    uri: 'music-theory://orchestration',
+    description: 'Instrument ranges, GM program numbers, four-part harmony ranges, texture types',
+    file: 'orchestration.md',
+  },
+  {
+    name: 'Rhythm Patterns',
+    uri: 'music-theory://rhythm-patterns',
+    description: 'Time signatures, MIDI duration reference, genre grooves, velocity and tempo guides',
+    file: 'rhythm-patterns.md',
+  },
+  {
+    name: 'Voice Leading',
+    uri: 'music-theory://voice-leading',
+    description: 'Forbidden parallels, chord voicing strategies, non-chord tones, MIDI tips',
+    file: 'voice-leading.md',
+  },
+] as const;
 
 // ---------- Interfaces ----------
 
@@ -177,6 +237,26 @@ export function createServer(): McpServer {
     }
   );
 
+  // --- Register Music Theory Resources ---
+  for (const res of MUSIC_THEORY_RESOURCES) {
+    const content = loadResource(res.file);
+    const uri = res.uri;
+    server.registerResource(
+      res.name,
+      res.uri,
+      { description: res.description, mimeType: 'text/markdown' },
+      async (_resourceUri) => ({
+        contents: [
+          {
+            uri,
+            mimeType: 'text/markdown',
+            text: content,
+          },
+        ],
+      })
+    );
+  }
+
   // --- Register App Resource (preview UI HTML) ---
   registerAppResource(server, 'MIDI Preview', RESOURCE_URI, {}, async () => ({
     contents: [
@@ -245,12 +325,15 @@ export function createServer(): McpServer {
 
   // --- Register Tool: parse_chord (non-UI tool) ---
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (server.tool as any)(
+  (server.registerTool as any)(
     'parse_chord',
-    'Parse a chord name and return its component MIDI pitches. Useful for understanding chord voicings.',
     {
-      chord: z.string().describe('Chord name (e.g., "Cmaj7", "Dm", "F#m7", "G7sus4")'),
-      octave: z.number().optional().describe('Octave for the root note (default: 4)'),
+      description:
+        'Parse a chord name and return its component MIDI pitches. Useful for understanding chord voicings.',
+      inputSchema: {
+        chord: z.string().describe('Chord name (e.g., "Cmaj7", "Dm", "F#m7", "G7sus4")'),
+        octave: z.number().optional().describe('Octave for the root note (default: 4)'),
+      },
     },
     async ({ chord, octave }: { chord: string; octave?: number }) => {
       try {
