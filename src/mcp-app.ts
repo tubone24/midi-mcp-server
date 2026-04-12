@@ -10,8 +10,8 @@ import {
   applyHostFonts,
   getDocumentTheme,
 } from '@modelcontextprotocol/ext-apps';
-import MidiWriter from 'midi-writer-js';
-import { resolvePitches, normalizeDuration } from './chord-utils.js';
+import { Midi } from '@tonejs/midi';
+import { resolvePitches } from './chord-utils.js';
 import Soundfont, { Player as SfPlayer, InstrumentName } from 'soundfont-player';
 
 // ---------- Types ----------
@@ -471,44 +471,41 @@ function resolvePitchesForUI(
 
 // ---------- Browser-Side MIDI Generation ----------
 
-function convertBeatToWait(beat: number, bpm: number): string {
-  const PPQ = 128;
-  return `T${Math.round(((beat - 1) * PPQ) / bpm)}`;
-}
-
 function generateMidiBase64(composition: CompositionData): string {
-  const tracks: unknown[] = [];
-  const tempo = composition.bpm || 120;
+  const bpm = composition.bpm || 120;
+  const secondsPerBeat = 60 / bpm;
+
+  const midi = new Midi();
+  midi.header.tempos = [{ ticks: 0, bpm }];
+  midi.header.timeSignatures = [{ ticks: 0, timeSignature: [4, 4] }];
+  midi.header.update();
+
   composition.tracks.forEach((trackData, ti) => {
-    // @ts-expect-error - midi-writer-js types incomplete
-    const track = new MidiWriter.Track();
-    if (trackData.name) track.addTrackName(trackData.name);
-    track.setTempo(tempo);
-    if (trackData.instrument !== undefined) {
-      // @ts-expect-error - midi-writer-js types incomplete
-      track.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: trackData.instrument, channel: ti % 16 }));
-    }
+    const track = midi.addTrack();
+    if (trackData.name) track.name = trackData.name;
+    if (trackData.instrument !== undefined) track.instrument.number = trackData.instrument;
+    // @tonejs/midi はチャンネルをトラック単位で管理する
+    track.channel = ti % 16;
+
     trackData.notes.forEach((note) => {
-      const pitches = resolvePitches(note.pitch, note.chord);
-      const duration = normalizeDuration(note.duration);
-      const wait = note.beat !== undefined
-        ? convertBeatToWait(note.beat, tempo)
-        : `T${Math.round((note.startTime ?? 0) * 0.5)}`;
-      track.addEvent(
-        // @ts-expect-error - midi-writer-js types incomplete
-        new MidiWriter.NoteEvent({
-          pitch: pitches.length === 1 ? [pitches[0]] : pitches,
-          duration, velocity: note.velocity ?? 100, channel: ti % 16, wait,
-        })
-      );
+      const pitches = resolvePitchesForUI(note.pitch, note.chord);
+      const durationSec = durationToBeats(note.duration) * secondsPerBeat;
+      const velocity = Math.min(1, Math.max(0, (note.velocity ?? 100) / 127));
+      const timeSec = note.beat !== undefined
+        ? (note.beat - 1) * secondsPerBeat
+        : (note.startTime ?? 0);
+
+      pitches.forEach((p) => {
+        const midiNum = typeof p === 'string' ? noteNameToMidi(p) : (p as number);
+        track.addNote({ midi: midiNum, time: timeSec, duration: durationSec, velocity });
+      });
     });
-    tracks.push(track);
   });
-  // @ts-expect-error - midi-writer-js types incomplete
-  const writer = new MidiWriter.Writer(tracks);
-  const data: Uint8Array = writer.buildFile();
+
+  // ブラウザ環境: Web標準の btoa を使用
+  const uint8Array = midi.toArray();
   let b = '';
-  for (let i = 0; i < data.length; i++) b += String.fromCharCode(data[i]);
+  for (let i = 0; i < uint8Array.length; i++) b += String.fromCharCode(uint8Array[i]);
   return btoa(b);
 }
 

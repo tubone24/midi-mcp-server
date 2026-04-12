@@ -17,10 +17,11 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import MidiWriter from 'midi-writer-js';
+import { Midi } from '@tonejs/midi';
 import {
   resolvePitches,
   normalizeDuration,
+  parseNoteName,
   getSupportedChordQualities,
   parseChordName,
   midiNumberToNoteName,
@@ -71,72 +72,70 @@ interface MidiComposition {
 
 // ---------- MIDI Generation ----------
 
-function convertBeatToWait(beat: number, bpm: number): string {
-  const PPQ = 128;
-  const adjustedBeat = beat - 1;
-  const ticks = Math.round((adjustedBeat * PPQ) / bpm);
-  return `T${ticks}`;
+/**
+ * duration文字列（normalizeDuration出力）を四分音符数（beats）に変換する。
+ */
+function durationToBeats(duration: string): number {
+  switch (duration) {
+    case '1':   return 4;
+    case '2':   return 2;
+    case '4':   return 1;
+    case '8':   return 0.5;
+    case '16':  return 0.25;
+    case '32':  return 0.125;
+    case '64':  return 0.0625;
+    case 'd1':  return 6;
+    case 'd2':  return 3;
+    case 'd4':  return 1.5;
+    case 'd8':  return 0.75;
+    case 'd16': return 0.375;
+    case 'dd4': return 1.75;
+    default: {
+      if (duration.startsWith('T')) return durationToBeats(duration.slice(1)) * (2 / 3);
+      return 1;
+    }
+  }
 }
 
 function generateMidiBase64(composition: MidiComposition): string {
-  const tracks: unknown[] = [];
-  const tempo = composition.bpm || composition.tempo || 120;
+  const bpm = composition.bpm || composition.tempo || 120;
   const timeSignature = composition.timeSignature || { numerator: 4, denominator: 4 };
+  const secondsPerBeat = 60 / bpm;
+
+  const midi = new Midi();
+  midi.header.tempos = [{ ticks: 0, bpm }];
+  midi.header.timeSignatures = [
+    { ticks: 0, timeSignature: [timeSignature.numerator, timeSignature.denominator] },
+  ];
+  midi.header.update();
 
   composition.tracks.forEach((trackData, trackIndex) => {
-    // @ts-expect-error - Track type
-    const track = new MidiWriter.Track();
-
-    if (trackData.name) track.addTrackName(trackData.name);
-    track.setTempo(tempo);
-    track.setTimeSignature(timeSignature.numerator, timeSignature.denominator);
-
-    if (trackData.instrument !== undefined) {
-      track.addEvent(
-        // @ts-expect-error - ProgramChangeEvent type
-        new MidiWriter.ProgramChangeEvent({
-          instrument: trackData.instrument,
-          channel: trackIndex % 16,
-        })
-      );
-    }
+    const track = midi.addTrack();
+    if (trackData.name) track.name = trackData.name;
+    if (trackData.instrument !== undefined) track.instrument.number = trackData.instrument;
+    // @tonejs/midi はチャンネルをトラック単位で管理する
+    track.channel = trackIndex % 16;
 
     trackData.notes.forEach((note) => {
       const pitches = resolvePitches(note.pitch, note.chord);
-      const duration = normalizeDuration(note.duration);
-      const velocity = note.velocity !== undefined ? note.velocity : 100;
-      const channel = note.channel !== undefined ? note.channel % 16 : trackIndex % 16;
+      const durationSec = durationToBeats(normalizeDuration(note.duration)) * secondsPerBeat;
+      const velocity = Math.min(1, Math.max(0, (note.velocity ?? 100) / 127));
+      const timeSec =
+        note.beat !== undefined
+          ? (note.beat - 1) * secondsPerBeat
+          : (note.startTime ?? note.time ?? 0);
 
-      let wait: string;
-      if (note.beat !== undefined) {
-        wait = convertBeatToWait(note.beat, tempo);
-      } else {
-        const startTime = note.startTime ?? note.time ?? 0;
-        wait = `T${Math.round(startTime * 0.5)}`;
-      }
-
-      track.addEvent(
-        // @ts-expect-error - NoteEvent type
-        new MidiWriter.NoteEvent({
-          pitch: pitches.length === 1 ? [pitches[0]] : pitches,
-          duration,
-          velocity,
-          channel,
-          wait,
-        })
-      );
+      pitches.forEach((pitch) => {
+        const midiNum = typeof pitch === 'string' ? parseNoteName(pitch) : (pitch as number);
+        track.addNote({ midi: midiNum, time: timeSec, duration: durationSec, velocity });
+      });
     });
-
-    tracks.push(track);
   });
 
-  // @ts-expect-error - Writer type
-  const writer = new MidiWriter.Writer(tracks);
-  const fileData: Uint8Array = writer.buildFile();
+  // Cloudflare Workers: Web標準の btoa を使用
+  const uint8Array = midi.toArray();
   let binary = '';
-  for (let i = 0; i < fileData.length; i++) {
-    binary += String.fromCharCode(fileData[i]);
-  }
+  for (let i = 0; i < uint8Array.length; i++) binary += String.fromCharCode(uint8Array[i]);
   return btoa(binary);
 }
 
