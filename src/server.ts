@@ -8,10 +8,11 @@ import {
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
 import { z } from 'zod';
-import MidiWriter from 'midi-writer-js';
+import { Midi } from '@tonejs/midi';
 import {
   resolvePitches,
   normalizeDuration,
+  parseNoteName,
   getSupportedChordQualities,
   parseChordName,
   midiNumberToNoteName,
@@ -118,76 +119,90 @@ export interface MidiComposition {
 
 // ---------- MIDI Generation (in-memory, no fs) ----------
 
-function convertBeatToWait(beat: number, bpm: number): string {
-  const PPQ = 128;
-  const adjustedBeat = beat - 1;
-  const ticks = Math.round((adjustedBeat * PPQ) / bpm);
-  return `T${ticks}`;
+/**
+ * duration文字列（normalizeDuration出力）を四分音符数（beats）に変換する。
+ * 四分音符 = 1 beat。全音符 = 4 beats。
+ */
+function durationToBeats(duration: string): number {
+  switch (duration) {
+    case '1':   return 4;      // 全音符
+    case '2':   return 2;      // 二分音符
+    case '4':   return 1;      // 四分音符
+    case '8':   return 0.5;    // 八分音符
+    case '16':  return 0.25;   // 十六分音符
+    case '32':  return 0.125;  // 三十二分音符
+    case '64':  return 0.0625; // 六十四分音符
+    case 'd1':  return 6;      // 付点全音符 (4 × 1.5)
+    case 'd2':  return 3;      // 付点二分音符 (2 × 1.5)
+    case 'd4':  return 1.5;    // 付点四分音符 (1 × 1.5)
+    case 'd8':  return 0.75;   // 付点八分音符 (0.5 × 1.5)
+    case 'd16': return 0.375;  // 付点十六分音符 (0.25 × 1.5)
+    case 'dd4': return 1.75;   // ダブル付点四分音符 (1 + 0.5 + 0.25)
+    default: {
+      // 三連符: 'T4' → 四分音符三連符 (2/3 beat), 'T8' → 八分音符三連符 (1/3 beat)
+      if (duration.startsWith('T')) {
+        const base = durationToBeats(duration.slice(1));
+        return base * (2 / 3);
+      }
+      return 1; // フォールバック: 四分音符
+    }
+  }
 }
 
 export function generateMidiBase64(composition: MidiComposition): string {
-  const tracks: unknown[] = [];
-  const tempo = composition.bpm || composition.tempo || 120;
+  const bpm = composition.bpm || composition.tempo || 120;
   const timeSignature = composition.timeSignature || { numerator: 4, denominator: 4 };
+  const secondsPerBeat = 60 / bpm;
+
+  const midi = new Midi();
+
+  // テンポ・拍子設定
+  midi.header.tempos = [{ ticks: 0, bpm }];
+  midi.header.timeSignatures = [
+    { ticks: 0, timeSignature: [timeSignature.numerator, timeSignature.denominator] },
+  ];
+  midi.header.update();
 
   composition.tracks.forEach((trackData, trackIndex) => {
-    // @ts-expect-error - Track is not properly exported in type definitions
-    const track = new MidiWriter.Track();
+    const track = midi.addTrack();
 
     if (trackData.name) {
-      track.addTrackName(trackData.name);
+      track.name = trackData.name;
     }
-
-    track.setTempo(tempo);
-    track.setTimeSignature(timeSignature.numerator, timeSignature.denominator);
-
     if (trackData.instrument !== undefined) {
-      track.addEvent(
-        // @ts-expect-error - ProgramChangeEvent is not properly exported in type definitions
-        new MidiWriter.ProgramChangeEvent({
-          instrument: trackData.instrument,
-          channel: trackIndex % 16,
-        })
-      );
+      track.instrument.number = trackData.instrument;
     }
+    // @tonejs/midi はチャンネルをトラック単位で管理する。
+    // note.channel は @tonejs/midi の addNote API では指定不可のため、
+    // トラックインデックスをチャンネルとして使用する。
+    track.channel = trackIndex % 16;
 
     trackData.notes.forEach((note) => {
       const pitches = resolvePitches(note.pitch, note.chord);
-      const duration = normalizeDuration(note.duration);
-      const velocity = note.velocity !== undefined ? note.velocity : 100;
-      const channel = note.channel !== undefined ? note.channel % 16 : trackIndex % 16;
+      const durationSec = durationToBeats(normalizeDuration(note.duration)) * secondsPerBeat;
+      // velocity: @tonejs/midi は 0.0〜1.0 の正規化値
+      const velocity = Math.min(1, Math.max(0, (note.velocity ?? 100) / 127));
 
-      let wait: string;
-      if (note.beat !== undefined) {
-        wait = convertBeatToWait(note.beat, tempo);
-      } else {
-        const startTime = note.startTime ?? note.time ?? 0;
-        wait = `T${Math.round(startTime * 0.5)}`;
-      }
+      // 開始時間（秒）: beat は 1 始まりなので -1 してからbeats→秒変換
+      const timeSec =
+        note.beat !== undefined
+          ? (note.beat - 1) * secondsPerBeat
+          : (note.startTime ?? note.time ?? 0);
 
-      track.addEvent(
-        // @ts-expect-error - NoteEvent is not properly exported in type definitions
-        new MidiWriter.NoteEvent({
-          pitch: pitches.length === 1 ? [pitches[0]] : pitches,
-          duration: duration,
-          velocity: velocity,
-          channel: channel,
-          wait: wait,
-        })
-      );
+      // 和音（複数ピッチ）は同一 time に複数ノートを追加
+      pitches.forEach((pitch) => {
+        const midiNum = typeof pitch === 'string' ? parseNoteName(pitch) : (pitch as number);
+        track.addNote({
+          midi: midiNum,
+          time: timeSec,
+          duration: durationSec,
+          velocity,
+        });
+      });
     });
-
-    tracks.push(track);
   });
 
-  // @ts-expect-error - Writer is not properly exported in type definitions
-  const writer = new MidiWriter.Writer(tracks);
-  const fileData: Uint8Array = writer.buildFile();
-  let binary = '';
-  for (let i = 0; i < fileData.length; i++) {
-    binary += String.fromCharCode(fileData[i]);
-  }
-  return btoa(binary);
+  return Buffer.from(midi.toArray()).toString('base64');
 }
 
 // ---------- Composition Preprocessing ----------
