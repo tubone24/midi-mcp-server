@@ -895,9 +895,19 @@ app.ontoolinput = (params) => {
 
 app.ontoolresult = (params) => {
   if (params.isError || currentMidiBase64) return;
+
+  // structuredContent から取得（LLMにトークンを消費させない）
+  const sc = params.structuredContent;
+  if (sc?.midiBase64 && typeof sc.midiBase64 === 'string') {
+    currentMidiBase64 = sc.midiBase64;
+    btnDownload.disabled = false;
+    return;
+  }
+
+  // フォールバック：structuredContent 非対応の旧ホスト向け
   const rb = params.content?.find((c) => c.type === 'resource');
   if (rb?.type === 'resource') {
-    const text = (rb as { type:'resource'; resource:{ text?:string } }).resource.text;
+    const text = (rb as { type: 'resource'; resource: { text?: string } }).resource.text;
     if (text) { currentMidiBase64 = text; btnDownload.disabled = false; }
   }
 };

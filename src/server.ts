@@ -284,6 +284,12 @@ export function createServer(): McpServer {
             'Composition object with bpm (number), optional timeSignature ({numerator, denominator}), and tracks (array of {name?, instrument?, notes: [{pitch, chord?, beat?, startTime?, duration, velocity?, channel?}]})'
           ),
       },
+      outputSchema: z.object({
+        midiBase64: z.string(),
+        title: z.string(),
+        bpm: z.number(),
+        trackCount: z.number(),
+      }),
       _meta: {
         ui: { resourceUri: RESOURCE_URI },
       },
@@ -299,15 +305,13 @@ export function createServer(): McpServer {
               type: 'text' as const,
               text: `MIDI file "${title}" generated successfully. ${composition.tracks.length} track(s), ${composition.bpm} BPM.`,
             },
-            {
-              type: 'resource' as const,
-              resource: {
-                uri: `data:audio/midi;base64,${midiBase64}`,
-                mimeType: 'audio/midi',
-                text: midiBase64,
-              },
-            },
           ],
+          structuredContent: {
+            midiBase64,
+            title,
+            bpm: composition.bpm,
+            trackCount: composition.tracks.length,
+          },
         };
       } catch (error) {
         return {
