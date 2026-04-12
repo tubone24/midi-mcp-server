@@ -904,12 +904,6 @@ app.ontoolresult = (params) => {
     return;
   }
 
-  // フォールバック：structuredContent 非対応の旧ホスト向け
-  const rb = params.content?.find((c) => c.type === 'resource');
-  if (rb?.type === 'resource') {
-    const text = (rb as { type: 'resource'; resource: { text?: string } }).resource.text;
-    if (text) { currentMidiBase64 = text; btnDownload.disabled = false; }
-  }
 };
 
 app.ontoolcancelled = (_p) => {

@@ -355,14 +355,6 @@ function createWorkerServer(): Server {
               type: 'text' as const,
               text: `MIDI file "${typedArgs.title}" generated successfully. ${composition.tracks.length} track(s), ${composition.bpm} BPM.`,
             },
-            {
-              type: 'resource' as const,
-              resource: {
-                uri: `data:audio/midi;base64,${midiBase64}`,
-                mimeType: 'audio/midi',
-                text: midiBase64,
-              },
-            },
           ],
           _meta: { ui: { resourceUri: RESOURCE_URI } },
         };
