@@ -8,7 +8,12 @@ import {
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
 import { z } from 'zod';
-import { Midi } from '@tonejs/midi';
+// @tonejs/midi is CJS-only; use createRequire so Node.js ESM can load it at runtime.
+// (Vite/vitest resolve the "module" field in package.json, which is ESM — tests pass either way.)
+import { createRequire } from 'module';
+import type { Midi as MidiType } from '@tonejs/midi';
+const _require = createRequire(import.meta.url);
+const { Midi } = _require('@tonejs/midi') as { Midi: typeof MidiType };
 import {
   resolvePitches,
   normalizeDuration,
